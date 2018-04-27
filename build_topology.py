@@ -1,6 +1,7 @@
 import os
 import sys
 import random
+from collections import defaultdict
 from mininet.topo import Topo
 from mininet.net import Mininet
 from mininet.node import CPULimitedHost
@@ -16,30 +17,45 @@ from time import sleep, time
 
 class JellyFishTop(Topo):
     ''' TODO, build your topology here'''
-    def build(self, nswitches=10, nhosts=10, k=4):
+    def build(self, nswitches=2, nhosts=2, k=4, r=1):
+        # switches = [self.addSwitch('s' + str(i)) for i in range(nswitches)]
+        # hosts = [self.addHost('h' + str(h)) for i in range(nhosts)]
+
+        # linkedSwitches = set()
+        # for s1 in switches:
+        #     switches.remove(s1)
+        #     for _ in range(k):
+        #         s2 = random.choice(switches)
+        #         if s1 != s2 and (s1, s2) not in linkedSwitches \
+        #                 and (s2, s1) not in linkedSwitches:
+        #             self.addLink(s1, s2)
+        #             linkedSwitches.add((s1, s2))
+        #     switches.add(s1)
+
+        nPortsUsed = defaultdict(int) # switch => num ports that have been connected to a link
         switches = [self.addSwitch('s' + str(i)) for i in range(nswitches)]
-        hosts = [self.addHost('h' + str(h)) for i in range(nhosts)]
+        hosts = [self.addHost('h' + str(i)) for i in range(nhosts)]
+        
+        # Connect each host to one switch
+        for h in hosts:
+            while True:
+                s = random.choice(switches)
+                nPorts = nPortsUsed[s]
+                if r - nPorts > 0:
+                    self.addLink(h, s)
+                    nPortsUsed[s] = nPorts + 1
+                    break
 
-        linkedSwitches = set()
-        for s1 in switches:
-            switches.remove(s1)
-            for _ in range(k):
-                s2 = random.choice(switches)
-                if s1 != s2 and (s1, s2) not in linkedSwitches \
-                        and (s2, s1) not in linkedSwitches:
-                    self.addLink(s1, s2)
-                    linkedSwitches.add((s1, s2))
-            switches.add(s1)
+        # Connect switches to each other
+        linkPairs = set()
 
-        leftHost = self.addHost( 'h1' )
-        rightHost = self.addHost( 'h2' )
-        leftSwitch = self.addSwitch( 's3' )
-        rightSwitch = self.addSwitch( 's4' )
-
-        # Add links
-        self.addLink( leftHost, leftSwitch )
-        self.addLink( leftSwitch, rightSwitch )
-        self.addLink( rightSwitch, rightHost )
+        switchPairs = [(s1, s2) for s1 in switches for s2 in switches if s1 != s2]
+        random.shuffle(switchPairs)
+        for s1, s2 in switchPairs:
+            if nPortsUsed[s1] < k and nPortsUsed[s2] < k:
+                self.addLink(s1, s2)
+                nPortsUsed[s1] += 1
+                nPortsUsed[s2] += 1
 
 
 def experiment(net):
