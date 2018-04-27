@@ -1,6 +1,7 @@
 import os
 import sys
 import random
+import json
 from collections import defaultdict
 from mininet.topo import Topo
 from mininet.net import Mininet
@@ -21,7 +22,12 @@ class JellyFishTop(Topo):
         nPortsUsed = defaultdict(int) # switch => num ports that have been connected to a link
         switches = [self.addSwitch('s' + str(i)) for i in range(nswitches)]
         hosts = [self.addHost('h' + str(i)) for i in range(nhosts)]
-        
+
+        # Dict of vertices to the list of vertices they connect to; this is a graph adjacency list.
+        # We ulitamtely output this representation of the graph in json, so another script can
+        # compute edge popularity among paths.
+        adj_list = {}
+
         # Connect each host to one switch
         for h in hosts:
             while True:
@@ -29,8 +35,11 @@ class JellyFishTop(Topo):
                 nPorts = nPortsUsed[s]
                 if r - nPorts > 0:
                     self.addLink(h, s)
+                    # Add links to graph adjacency list
+                    self.update_adj_list(adj_list, h ,s)
+                    self.update_adj_list(adj_list, s, h)
                     nPortsUsed[s] = nPorts + 1
-                    print h, "is connected to", s
+                    # print h, "is connected to", s
                     break
 
         # Connect switches to each other
@@ -45,14 +54,24 @@ class JellyFishTop(Topo):
         for s1, s2 in switchPairs:
             if nPortsUsed[s1] < k and nPortsUsed[s2] < k:
                 self.addLink(s1, s2)
-                print s1, "is connected to", s2
+                # Add links to graph adjacency list
+                self.update_adj_list(adj_list, s1, s2)
+                self.update_adj_list(adj_list, s2, s1)
+                # print s1, "is connected to", s2
                 nPortsUsed[s1] += 1
                 nPortsUsed[s2] += 1
 
+        # Output adjacency list in json format into temp file.
+        with open('jellyfish_graph_adj_list.json', 'w') as fp:
+            json.dump(adj_list, fp)
+
+    def update_adj_list(self, adj_list, v1, v2):
+        adj_list.setdefault(v1, [])
+        adj_list[v1].append(v2)
 
 def experiment(net):
     net.start()
-    # sleep(3)
+    sleep(3)
     net.pingAll()
     net.stop()
 
