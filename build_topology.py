@@ -17,7 +17,7 @@ from time import sleep, time
 
 class JellyFishTop(Topo):
     ''' TODO, build your topology here'''
-    def build(self, nswitches=2, nhosts=2, k=4, r=1):
+    def build(self, nswitches=5, nhosts=2, k=4, r=1):
         # switches = [self.addSwitch('s' + str(i)) for i in range(nswitches)]
         # hosts = [self.addHost('h' + str(h)) for i in range(nhosts)]
 
@@ -44,16 +44,22 @@ class JellyFishTop(Topo):
                 if r - nPorts > 0:
                     self.addLink(h, s)
                     nPortsUsed[s] = nPorts + 1
+                    print h, "is connected to", s
                     break
 
         # Connect switches to each other
         linkPairs = set()
 
-        switchPairs = [(s1, s2) for s1 in switches for s2 in switches if s1 != s2]
+        switchPairs = []
+        for idx, s1 in enumerate(switches):
+            for idx2 in range(idx + 1, len(switches)):
+                switchPairs.append((s1, switches[idx2]))
+
         random.shuffle(switchPairs)
         for s1, s2 in switchPairs:
             if nPortsUsed[s1] < k and nPortsUsed[s2] < k:
                 self.addLink(s1, s2)
+                print s1, "is connected to", s2
                 nPortsUsed[s1] += 1
                 nPortsUsed[s2] += 1
 
