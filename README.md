@@ -19,3 +19,5 @@ sudo mn --custom build_topology.py --topo JellyTopo --test pingall --controller=
 ```
 
 That starts a test on the custom mininet topology using your custom controller!
+
+If you ever want to kill POX and the screen it's running on, you can simply switch to the POX screen and press `Ctrl-A`, then type `:quit`.
