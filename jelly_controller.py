@@ -136,9 +136,9 @@ class Tutorial (object):
     print "Src: " + str(packet.src)
     print "Dest: " + str(packet.dst)
     print "Event port: " + str(event.port)
-    self.act_like_hub(packet, packet_in)
+    # self.act_like_hub(packet, packet_in)
     log.info("packet in")
-    #self.act_like_switch(packet, packet_in)
+    self.act_like_switch(packet, packet_in)
 
 
 
