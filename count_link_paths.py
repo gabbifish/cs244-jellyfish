@@ -3,7 +3,10 @@ import json
 import itertools
 import random
 from collections import defaultdict
-# matplotlib
+import matplotlib
+matplotlib.use('AGG')
+import matplotlib.pyplot as plt
+#import plotly.plotly as py
 
 def pairwise(iterable):
     "s -> (s0,s1), (s1,s2), (s2, s3), ..."
@@ -56,8 +59,35 @@ def count_distinct_paths(graph, get_paths_func, k):
     #                     edgesToNumPaths[(n1, n2)] = 1
     # return edgesToNumPaths
 
+def create_plot(edges_to_npaths, filename):
+    y = sorted(edges_to_npaths.values())
+    x = list(range(0, len(y)))
+    plt.plot(x, y)
+    plt.savefig(filename)
+
+def create_figure(kshortest_data, ecmp8_data, ecmp64_data, filename):
+    links = kshortest_data.keys()
+    kshortest = sorted(kshortest_data.values())
+    ecmp8 = sorted([ecmp8_data[link] for link in links])
+    ecmp64 = sorted([ecmp64_data[link] for link in links])  
+    x = list(range(0, len(links)))
+    
+    plt.figure()
+    plt.plot(x, kshortest)
+    plt.plot(x, ecmp8)
+    plt.plot(x, ecmp64)
+
+    plt.savefig(filename)
+
+
 #G = create_graph_from_adjlist('jellyfish_graph_adj_list.json')
-G = nx.random_regular_graph(d=2, n=3)
-print count_distinct_paths(G, k_shortest_paths, 8)
-print count_distinct_paths(G, ecmp, 8)
-print count_distinct_paths(G, ecmp, 64)
+G = nx.random_regular_graph(d=6, n=686)
+kshortest_data = count_distinct_paths(G, k_shortest_paths, 8)
+ecmp8_data = count_distinct_paths(G, ecmp, 8)
+ecmp64_data = count_distinct_paths(G, ecmp, 64)
+
+# create_plot(kshortest_data, 'kshortest.png')
+# create_plot(ecmp8_data, 'ecmp8.png')
+# create_plot(ecmp64_data, 'ecmp64.png')
+create_figure(kshortest_data, ecmp8_data, ecmp64_data, 'figure9-6degree2.png')
+
