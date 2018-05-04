@@ -23,10 +23,38 @@ It's roughly similar to the one Brandon Heller did for NOX.
 
 from pox.core import core
 import pox.openflow.libopenflow_01 as of
+import pox.lib.packet as pkt
+from pox.lib.packet import *
+
+from networkx.readwrite import json_graph
+import networkx as nx
+import json
+import random
+import itertools
 
 log = core.getLogger()
 
+with open('pox/ext/nxgraph.json', 'r') as fp:
+  data = json.load(fp)
+G = json_graph.adjacency_graph(data)
 
+def k_shortest_paths(graph, source, target, k=8):
+  return list(itertools.islice(
+      nx.shortest_simple_paths(graph, source, target), k))
+
+def get_out_port(src, dst):
+  if src == dst:
+    # the destination is the host attached to this switch
+    # all switches attach to their host at port 0
+    return 0
+
+  # choose one random path out of 8 shortest paths to traverse
+  paths = k_shortest_paths(G, src, dst)
+  path = random.choice(paths)
+  next_hop = path[1]
+
+  # switch i is connected to this switch via port i+1
+  return next_hop + 1
 
 class Tutorial (object):
   """
@@ -44,6 +72,9 @@ class Tutorial (object):
     # Use this table to keep track of which ethernet address is on
     # which switch port (keys are MACs, values are ports).
     self.mac_to_port = {}
+
+    # Pseudo-routing table of next-hop IP addresses to outgoing port
+    self.ip_to_port = {}
 
 
   def resend_packet (self, packet_in, out_port):
@@ -78,28 +109,59 @@ class Tutorial (object):
     # sending it (len(packet_in.data) should be == packet_in.total_len)).
 
 
-  def act_like_switch (self, packet, packet_in):
+  def act_like_switch (self, packet, packet_in, name):
     """
     Implement switch-like behavior.
     """
 
-    """ # DELETE THIS LINE TO START WORKING ON THIS (AND THE ONE BELOW!) #
+    # DELETE THIS LINE TO START WORKING ON THIS (AND THE ONE BELOW!) #
 
     # Here's some psuedocode to start you off implementing a learning
     # switch.  You'll need to rewrite it as real Python code.
 
     # Learn the port for the source MAC
-    self.mac_to_port ... <add or update entry>
+    self.mac_to_port[packet.src] = packet_in.in_port
 
-    if the port associated with the destination MAC of the packet is known:
+    # arp = packet.find('arp')
+    # if arp is not None:
+    #   # for now, ignore arp packets since we know the entire topology
+    #   return
+
+    ipv6 = packet.find('ipv6')
+    if ipv6 is not None:
+      srcip = ipv6.srcip
+      dstip = ipv6.dstip
+      dst_id = int(str(dstip).split(":")[-1], 16)
+      log.info("srcipv6 " + str(srcip))
+      log.info("dstipv6 " + str(dstip))
+
+    ipv4 = packet.find('ipv4')
+    if ipv4 is not None:
+      srcip = ipv4.srcip
+      dstip = ipv4.dstip
+      dst_id = int(str(dstip).split(".")[-1])
+      print "srcipv4", srcip
+      print "dstipv4", dstip
+
+    # src_id = int(name[1:])
+    # if dst_id in G:
+    #   log.info("dst_id " + str(dst_id))
+    #   out_port = get_out_port(src_id, dst_id)
+    #   self.resend_packet(packet_in, out_port)
+
+    #if packet.type == pkt.IP_TYPE:
+    ip_packet = packet.payload
+    log.info(ip_packet)
+
+    #if the port associated with the destination MAC of the packet is known:
       # Send packet out the associated port
-      self.resend_packet(packet_in, ...)
+      #self.resend_packet(packet_in, ...)
 
       # Once you have the above working, try pushing a flow entry
       # instead of resending the packet (comment out the above and
       # uncomment and complete the below.)
 
-      log.debug("Installing flow...")
+      #log.debug("Installing flow...")
       # Maybe the log statement should have source/destination/port?
 
       #msg = of.ofp_flow_mod()
@@ -111,12 +173,12 @@ class Tutorial (object):
       #
       #< Add an output action, and send -- similar to resend_packet() >
 
-    else:
+    #else:
       # Flood the packet out everything but the input port
       # This part looks familiar, right?
-      self.resend_packet(packet_in, of.OFPP_ALL)
+      #self.resend_packet(packet_in, of.OFPP_ALL)
 
-    """ # DELETE THIS LINE TO START WORKING ON THIS #
+    # DELETE THIS LINE TO START WORKING ON THIS #
 
 
   def _handle_PacketIn (self, event):
@@ -133,12 +195,14 @@ class Tutorial (object):
 
     # Comment out the following line and uncomment the one after
     # when starting the exercise.
-    print "Src: " + str(packet.src)
-    print "Dest: " + str(packet.dst)
-    print "Event port: " + str(event.port)
-    # self.act_like_hub(packet, packet_in)
+    # print "Src: " + str(packet.src)
+    # print "Dest: " + str(packet.dst)
+    # print "Event port: " + str(event.port)
+    # #self.act_like_hub(packet, packet_in)
     log.info("packet in")
-    self.act_like_switch(packet, packet_in)
+
+    name = event.connection.features.ports[0].name
+    self.act_like_switch(packet, packet_in, name)
 
 
 

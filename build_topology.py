@@ -14,11 +14,46 @@ from mininet.cli import CLI
 sys.path.append("../../")
 from pox.ext.jelly_pox import JELLYPOX
 from subprocess import Popen
-# from time import sleep, time
+#from time import sleep, time
 
 class JellyFishTop(Topo):
-    ''' TODO, build your topology here'''
-    def build(self, nswitches=3, nhosts=3, k=3, r=1):
+    ''' Builds topology '''
+    def build(self):
+        self.build_from_json()
+        #self.build_from_algorithm()
+
+    ''' Builds topology from given json file of graph adjacency list'''
+    def build_from_json(self, filename='graph.json'):
+        with open(filename, 'r') as fp:
+            adj_dict = json.load(fp)
+
+            # add all switches
+            for node in adj_dict.keys():
+                s = self.addSwitch('s' + str(node))
+
+            # connect every switch to a host
+            for node in adj_dict.keys():
+                s = 's' + node
+                host_ip = "10.0.0." + node
+                h = self.addHost('h' + node, ip=host_ip)
+                self.addLink(s, h, port1=0, port2=0)
+
+            # connect switches to each other
+            connected_switches = set()
+            for node, neighbors in adj_dict.iteritems():
+                s = 's' + node
+                for i in neighbors:
+                    n = 's' + str(i)
+                    if (s, n) not in connected_switches \
+                            and (n, s) not in connected_switches:
+                        self.addLink(s, n, port1=int(i)+1, port2=int(node)+1)
+                        #self.addLink(s, n)
+                        connected_switches.add((s, n))
+
+
+
+    ''' Builds topology from algorithm described in paper '''
+    def build_from_algorithm(self, nswitches=3, nhosts=3, k=3, r=1):
         nPortsUsed = defaultdict(int) # switch => num ports that have been connected to a link
         switches = [self.addSwitch('s' + str(i)) for i in range(nswitches)]
         hosts = [self.addHost('h' + str(i)) for i in range(nhosts)]
@@ -71,8 +106,9 @@ class JellyFishTop(Topo):
 
 def experiment(net):
     net.start()
-    sleep(3)
+    #sleep(3)
     net.pingAll()
+    #CLI (net)
     net.stop()
 
 TOPOS = {'JellyTopo' : (lambda : JellyFishTop())}
