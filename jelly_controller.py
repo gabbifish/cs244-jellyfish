@@ -23,20 +23,85 @@ It's roughly similar to the one Brandon Heller did for NOX.
 
 from pox.core import core
 import pox.openflow.libopenflow_01 as of
+from pox.lib.packet.ethernet import ethernet, ETHER_BROADCAST
+from collections import defaultdict
 
 log = core.getLogger()
 
+def ipinfo (ip):
+  parts = [int(x) for x in str(ip).split('.')]
+  ID = parts[1]
+  port = parts[2]
+  num = parts[3]
+  return switches_by_id.get(ID),port,num
 
+# Adjacency map.  [sw1][sw2] -> port from sw1 to sw2
+adjacency = defaultdict(lambda:defaultdict(lambda:None))
 
-class Tutorial (object):
+# Switches we know of.  [dpid] -> Switch and [id] -> Switch
+switches_by_dpid = {}
+switches_by_id = {}
+
+# [sw1][sw2] -> (distance, intermediate)
+path_map = defaultdict(lambda:defaultdict(lambda:(None,None)))
+
+class Entry (object):
   """
-  A Tutorial object is created for each switch that connects.
+  Not strictly an ARP entry.
+  We use the port to determine which port to forward traffic out of.
+  We use the MAC to answer ARP replies.
+  We use the timeout so that if an entry is older than ARP_TIMEOUT, we
+   flood the ARP request rather than try to answer it ourselves.
+  """
+  def __init__ (self, port, mac):
+    self.timeout = time.time() + ARP_TIMEOUT
+    self.port = port
+    self.mac = mac
+
+  def __eq__ (self, other):
+    if type(other) == tuple:
+      return (self.port,self.mac)==other
+    else:
+      return (self.port,self.mac)==(other.port,other.mac)
+  def __ne__ (self, other):
+    return not self.__eq__(other)
+
+  def isExpired (self):
+    if self.port == of.OFPP_NONE: return False
+    return time.time() > self.timeout
+
+
+def dpid_to_mac (dpid):
+  return EthAddr("%012x" % (dpid & 0xffFFffFFffFF,))
+
+class TopoSwitch (object):
+  """
+  A TopoSwitch object is created for each switch that connects.
   A Connection object for that switch is passed to the __init__ function.
   """
+
   def __init__ (self, connection):
     # Keep track of the connection to the switch so that we can
     # send it messages!
     self.connection = connection
+    self.ports = None
+    self.dpid = None
+    self._listeners = None
+    self._connected_at = None
+    self._id = None
+    self.subnet = None
+    self.network = None
+    self._install_flow = False
+    self.mac = None
+
+    self.ip_to_mac = {}
+
+    # For each switch, we map IP addresses to Entries
+    self.arpTable = {}
+
+    # These are "fake gateways" -- we'll answer ARPs for them with MAC
+    # of the switch they're connected to.
+    self.fakeways = set([])
 
     # This binds our PacketIn event listener
     connection.addListeners(self)
@@ -45,6 +110,38 @@ class Tutorial (object):
     # which switch port (keys are MACs, values are ports).
     self.mac_to_port = {}
 
+    # NEED TO MATCH ACTION TABLE TO SWITCH.
+
+  def connect (self, connection):
+    log.info("New connection")
+    if connection is None:
+      log.warn("Can't connect to nothing")
+      return
+    if self.dpid is None:
+      self.dpid = connection.dpid
+
+    # assert self.dpid == connection.dpid
+    # if self.ports is None:
+    #   self.ports = connection.features.ports
+    # self.disconnect()
+    # self.connection = connection
+    # self._listeners = self.listenTo(connection)
+    # self._connected_at = time.time()
+
+    # label = dpid_to_str(connection.dpid)
+    # self.log = log.getChild(label)
+    # self.log.debug("Connect %s" % (connection,))
+
+    # if self._id is None:
+    #   if self.dpid not in switches_by_id and self.dpid <= 254:
+    #     self._id = self.dpid
+    #   else:
+    #     self._id = TopoSwitch._next_id
+    #     TopoSwitch._next_id += 1
+    #   switches_by_id[self._id] = self
+
+    # self.network = IPAddr("10.%s.0.0" % (self._id,))
+    # self.mac = dpid_to_mac(self.dpid)
 
   def resend_packet (self, packet_in, out_port):
     """
@@ -68,6 +165,7 @@ class Tutorial (object):
     Implement hub-like behavior -- send all packets to all ports besides
     the input port.
     """
+    log.info("switch %s has mac_to_port table %s", self.dpid, self.mac_to_port)
     # We want to output to all ports -- we do that using the special
     # OFPP_ALL port as the output port.  (We could have also used
     # OFPP_FLOOD.)
@@ -82,15 +180,18 @@ class Tutorial (object):
     """
     Implement switch-like behavior.
     """
-
-    """ # DELETE THIS LINE TO START WORKING ON THIS (AND THE ONE BELOW!) #
+    # log.info(packet)
+    log.info("switch %s has mac_to_port table %s", self.dpid, self.mac_to_port)
+    """
+    # DELETE THIS LINE TO START WORKING ON THIS (AND THE ONE BELOW!) #
 
     # Here's some psuedocode to start you off implementing a learning
     # switch.  You'll need to rewrite it as real Python code.
 
     # Learn the port for the source MAC
-    self.mac_to_port ... <add or update entry>
+    self.mac_to_port[]
 
+    # use dst IP to get DST Mac to get necessary port
     if the port associated with the destination MAC of the packet is known:
       # Send packet out the associated port
       self.resend_packet(packet_in, ...)
@@ -115,38 +216,76 @@ class Tutorial (object):
       # Flood the packet out everything but the input port
       # This part looks familiar, right?
       self.resend_packet(packet_in, of.OFPP_ALL)
+    """
 
-    """ # DELETE THIS LINE TO START WORKING ON THIS #
-
+  def _mac_learn (self, mac, ip):
+    # if ip.inNetwork(self.network,"255.255.0.0"):
+    if self.ip_to_mac.get(ip) != mac:
+      self.ip_to_mac[ip] = mac
+      # self._send_rewrite_rule(ip, mac)
+      return True
+    return False
 
   def _handle_PacketIn (self, event):
     """
-    Handles packet in messages from the switch.
+    Handles packet in messages from the switch. Have to handle case when
+    packet is recieved but all switches aren't up yet. Sleep?
     """
-
+    packet_in = event.ofp # The actual ofp_packet_in message.
+    
     packet = event.parsed # This is the parsed packet data.
     if not packet.parsed:
-      log.warning("Ignoring incomplete packet")
+      log.warning("%i %i ignoring unparsed packet", dpid, inport)
+      return
+  
+    arpp = packet.find('arp')
+    if arpp is not None:
+      if self._mac_learn(packet.src, arpp.protosrc):
+        log.info("switch %s learned %s -> %s by ARP", self.dpid, arpp.protosrc,packet.src)
+      # dpid = event.connection.dpid
+      inport = event.port 
+      if packet.src not in self.mac_to_port:
+        self.mac_to_port[packet.src] = inport
+
+    # log.info("recieved packet %s" % str(packet))
+
+    # if dpid not in self.arpTable:
+    #   # New switch -- create an empty table
+    #   self.arpTable[dpid] = {}
+    #   # for fake in self.fakeways:
+    #   #   self.arpTable[dpid][IPAddr(fake)] = Entry(of.OFPP_NONE,
+    #   #    dpid_to_mac(dpid))
+
+    if packet.type == ethernet.LLDP_TYPE:
+      # Ignore LLDP packets
       return
 
-    packet_in = event.ofp # The actual ofp_packet_in message.
+    # Flood ARP packets? for now...
+    # arp = packet.find('arp')
+    # if arp is not None:
+    #   self.act_like_hub(packet, packet_in)
 
-    # Comment out the following line and uncomment the one after
-    # when starting the exercise.
-    print "Src: " + str(packet.src)
-    print "Dest: " + str(packet.dst)
-    print "Event port: " + str(event.port)
-    # self.act_like_hub(packet, packet_in)
-    log.info("packet in")
-    self.act_like_switch(packet, packet_in)
-
-
+    # # But do not flood IP packets!
+    # ip = packet.find('ipv4')
+    # if ip is not None:
+    self.act_like_hub(packet, packet_in)
+    # self.act_like_switch(packet, packet_in)
 
 def launch ():
   """
-  Starts the component
+  Starts the component. Listens to all up events. 
   """
   def start_switch (event):
-    log.debug("Controlling %s" % (event.connection,))
-    Tutorial(event.connection)
+    log.info("switch %s has come up, and has ports" % event.dpid)
+    log.info(event.connection.ports)
+    sw = switches_by_dpid.get(event.dpid)
+
+    if sw is None:
+      # New switch
+      sw = TopoSwitch(event.connection)
+      switches_by_dpid[event.dpid] = sw
+      sw.connect(event.connection)
+    else:
+      sw.connect(event.connection)
   core.openflow.addListenerByName("ConnectionUp", start_switch)
+  # ^ should be register_new
