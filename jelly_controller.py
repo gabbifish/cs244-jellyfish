@@ -159,18 +159,24 @@ class TopoSwitch (object):
     # sending it (len(packet_in.data) should be == packet_in.total_len)).
 
 
-  def act_like_switch (self, packet, packet_in, name):
+  def act_like_switch (self, packet, packet_in):
     """
     Implement switch-like behavior.
     """
     # log.info(packet)
     # self.resend_packet(packet_in, 2)
     switch_name = "s" + str(self._id)
+    dst_host = None
+
+    arpp = packet.find('arp')
+    if arpp is not None:
+      dst_host = ipinfo(arpp.protodst)[1]
 
     # if switch != id number of destination, this switch is not directly
     # connected to dst host. Forward out correct port.
     ipp = packet.find('ipv4')
-    dst_host = ipinfo(ipp.dstip)[1]
+    if ipp is not None:
+      dst_host = ipinfo(ipp.dstip)[1]
 
     # Default: this switch is connected to our destination port.
     # Port 1 always connects to host, by our design. 
@@ -180,7 +186,7 @@ class TopoSwitch (object):
 
     # Other case: this switch is not connected to destination port, will have
     # to forward to other switch.
-    if dst_host != self._id:
+    if dst_host is not None and dst_host != self._id:
       # TODO: PUT NEXT-HOP SELECTION CODE HERE!!! THIS WILL USE THE ALGORITHMS!
       # Right now, since we are using a triangle topology and all switches are connected,
       # we know that sending the packet to sX will send it to hX.
@@ -293,38 +299,38 @@ class TopoSwitch (object):
 
     arpp = packet.find('arp')
     if arpp is not None:
-      # Learn IP to MAC address mapping.
-      if self._mac_learn(packet.src, arpp.protosrc):
-        log.info("switch %s learned %s -> %s by ARP", self.dpid, arpp.protosrc, packet.src)
-      # dpid = event.connection.dpid
-      inport = event.port 
-      if packet.src not in self.mac_to_port:
-        self.mac_to_port[packet.src] = inport
-      # Respond to ARP request if appropriate.
-      if arpp.opcode == arp.REQUEST and ipinfo(arpp.protosrc)[0] == 1:
-        log.info("ARP request for dst %s from source %s recieved by switch %d on port %d", arpp.protodst, arpp.protosrc, self.dpid, inport)
-        e = self._arp_response_pkt(arpp, packet)
-        msg = of.ofp_packet_out()
-        msg.data = e.pack()
-        msg.actions.append(of.ofp_action_output(port = of.OFPP_IN_PORT))
-        msg.in_port = inport
-        event.connection.send(msg)
+      self.act_like_switch(packet, packet_in)
+      arp_type = "unknown"
+      if arpp.opcode == arp.REQUEST:
+        arp_type = "request"
+        # return
+        # NOTE: in a triangle topology, forwarding arp requests is not necessary
+        # but it may be if topology changes
+      elif arpp.opcode == arp.REPLY:
+        arp_type = "reply"
+      log.info("ARP %s for dst %s from source %s recieved by switch %d on port %d", 
+        arp_type, arpp.protodst, arpp.protosrc, self.dpid, event.port)
+      # # Learn IP to MAC address mapping.
+      # if self._mac_learn(packet.src, arpp.protosrc):
+      #   log.info("switch %s learned %s -> %s by ARP", self.dpid, arpp.protosrc, packet.src)
+      # # dpid = event.connection.dpid
+      # inport = event.port 
+      # if packet.src not in self.mac_to_port:
+      #   self.mac_to_port[packet.src] = inport
+      # # Respond to ARP request if appropriate.
+      # if arpp.opcode == arp.REQUEST and ipinfo(arpp.protosrc)[0] == 1:
+      #   log.info("ARP request for dst %s from source %s recieved by switch %d on port %d", arpp.protodst, arpp.protosrc, self.dpid, inport)
+      #   e = self._arp_response_pkt(arpp, packet)
+      #   msg = of.ofp_packet_out()
+      #   msg.data = e.pack()
+      #   msg.actions.append(of.ofp_action_output(port = of.OFPP_IN_PORT))
+      #   msg.in_port = inport
+      #   event.connection.send(msg)
 
     ipp = packet.find('ipv4')
     if ipp is not None:
-      log.info("IP packet received by switch %d on port %d. src is %s, dst is %s", self._id, event.port, ipp.srcip, ipp.dstip)
-      log.info("switch %s has mac_to_port table %s", self.dpid, self.mac_to_port)
-      # Need to send out ARP requests to figure out next hop. 
-      # Namely, which outgoing port corresponds to your next hop?
-      # for i in adjacency[self.dpid]:
-        # e = self._arp_response_pkt(arpp, i)
-        # msg = of.ofp_packet_out()
-        # msg.data = e.pack()
-        # msg.actions.append(of.ofp_action_output(port = of.OFPP_ALL))
-        # msg.in_port = inport
-        # event.connection.send(msg)
-      # Only forward IP packets, not ARP.
-      # self.act_like_hub(packet, packet_in)
+      log.info("IP packet received by switch %d on port %d. src is %s, dst is %s",
+        self._id, event.port, ipp.srcip, ipp.dstip)
       self.act_like_switch(packet, packet_in)
 
 def launch ():
