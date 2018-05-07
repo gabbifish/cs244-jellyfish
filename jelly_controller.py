@@ -25,6 +25,7 @@ from pox.core import core
 import pox.openflow.libopenflow_01 as of
 from pox.lib.packet.ethernet import ethernet, ETHER_BROADCAST, EthAddr
 from pox.lib.packet.ipv4 import IPAddr
+from pox.lib.packet.ipv4 import ipv4
 from pox.lib.packet.arp import arp
 from pox.lib.util import dpid_to_str, str_to_bool
 from collections import defaultdict
@@ -34,12 +35,17 @@ import networkx as nx
 import json
 import random
 import itertools
+from zlib import crc32
+from struct import pack
 
 log = core.getLogger()
 
 # Placeholder for graph representation, read from graph.json in 
 # launch().
 G = None
+
+# [packet_hash] -> path
+path_map = {}
 
 with open('pox/ext/nxgraph.json', 'r') as fp:
   data = json.load(fp)
@@ -50,6 +56,10 @@ with open('pox/ext/nxgraph.json', 'r') as fp:
 def k_shortest_paths(graph, source, target, k=1):
   return list(itertools.islice(
       nx.shortest_simple_paths(graph, source, target), k))
+
+def choose_path(src, dst):
+  paths = k_shortest_paths(G, src, dst, k=8)
+  return random.choice(paths)
 
 def get_out_port(src, dst):
   if src == dst:
@@ -64,6 +74,18 @@ def get_out_port(src, dst):
 
   # this switch is connected to switch i via port i+2
   return next_hop + 2
+
+# Adapted from ripl-pox source code
+def packet_hash(packet):
+  "Return an 3-tuple hash for TCP/IP packets, otherwise 0."
+  hash_input = [0] * 3
+  if isinstance(packet.next, ipv4):
+    ip = packet.next
+    hash_input[0] = ip.srcip.toUnsigned()
+    hash_input[1] = ip.dstip.toUnsigned()
+    hash_input[2] = ip.id
+    return crc32(pack('LLH', *hash_input))
+  return 0
 
 # Adjacency map.  [sw1][sw2] -> port from sw1 to sw2
 # adjacency = defaultdict(lambda:defaultdict(lambda:None))
@@ -179,7 +201,7 @@ class TopoSwitch (object):
     # sending it (len(packet_in.data) should be == packet_in.total_len)).
 
 
-  def act_like_switch (self, packet, packet_in):
+  def act_like_switch (self, packet, packet_in, inport):
     """
     Implement switch-like behavior.
     """
@@ -188,30 +210,33 @@ class TopoSwitch (object):
     switch_name = "s" + str(self._id)
     dst_host = None
 
+    # Default: this switch is connected to our destination port.
+    # Port 1 always connects to host, by our design. 
+    outport = 1
+
     arpp = packet.find('arp')
     if arpp is not None:
       dst_host = ipinfo(arpp.protodst)[1]
+      if dst_host != self._id:
+        path = k_shortest_paths(G, self._id, dst_host, k=1)[0]
+        next_hop = path[1]
+        outport = next_hop + 2
 
     # if switch != id number of destination, this switch is not directly
     # connected to dst host. Forward out correct port.
     ipp = packet.find('ipv4')
     if ipp is not None:
       dst_host = ipinfo(ipp.dstip)[1]
+      hashkey = packet_hash(packet)
+      if inport == 1:
+        # received a packet from the attached host
+        paths = k_shortest_paths(G, self._id, dst_host, k=8)
+        path_map[hashkey] = random.choice(paths)
 
-    # Default: this switch is connected to our destination port.
-    # Port 1 always connects to host, by our design. 
-    # TODO: THIS DOESN'T GET THE PACKET FROM SWITCH TO HOST???
-    # outport = of.OFPP_IN_PORT
-    outport = 1
-
-    # Other case: this switch is not connected to destination port, will have
-    # to forward to other switch.
-    if dst_host is not None and dst_host != self._id:
-      # TODO: PUT NEXT-HOP SELECTION CODE HERE!!! THIS WILL USE THE ALGORITHMS!
-      # Right now, since we are using a triangle topology and all switches are connected,
-      # we know that sending the packet to sX will send it to hX.
-      #outport = dst_host + 2
-      outport = get_out_port(self._id, dst_host)
+      if dst_host != self._id:
+        path = path_map[hashkey]
+        next_hop = path[path.index(self._id) + 1]
+        outport =  next_hop + 2
 
     log.info("forwarding out of switch %d using port %d", self._id, outport)
 
@@ -320,7 +345,6 @@ class TopoSwitch (object):
 
     arpp = packet.find('arp')
     if arpp is not None:
-      self.act_like_switch(packet, packet_in)
       arp_type = "unknown"
       if arpp.opcode == arp.REQUEST:
         arp_type = "request"
@@ -331,6 +355,7 @@ class TopoSwitch (object):
         arp_type = "reply"
       log.info("ARP %s for dst %s from source %s recieved by switch %d on port %d", 
         arp_type, arpp.protodst, arpp.protosrc, self.dpid, event.port)
+      self.act_like_switch(packet, packet_in, event.port)
       # # Learn IP to MAC address mapping.
       # if self._mac_learn(packet.src, arpp.protosrc):
       #   log.info("switch %s learned %s -> %s by ARP", self.dpid, arpp.protosrc, packet.src)
@@ -352,7 +377,7 @@ class TopoSwitch (object):
     if ipp is not None:
       log.info("IP packet received by switch %d on port %d. src is %s, dst is %s",
         self._id, event.port, ipp.srcip, ipp.dstip)
-      self.act_like_switch(packet, packet_in)
+      self.act_like_switch(packet, packet_in, event.port)
 
 def launch ():
   """
