@@ -20,8 +20,8 @@ class JellyFishTop(Topo):
     ''' TODO, build your topology here'''
     def build(self, nswitches=3, nhosts=3, k=3, r=1):
         nPortsUsed = defaultdict(int) # switch => num ports that have been connected to a link
-        switches = [self.addSwitch('s' + str(i)) for i in range(nswitches)]
-        hosts = [self.addHost('h' + str(i)) for i in range(nhosts)]
+        switches = [self.addSwitch('s' + str(i), ip="10.0.0.%d" % i) for i in range(nswitches)]
+        hosts = [self.addHost('h' + str(i), ip="10.0.%d.0" % i) for i in range(nhosts)]
 
         # Dict of vertices to the list of vertices they connect to; this is a graph adjacency list.
         # We ulitamtely output this representation of the graph in json, so another script can
@@ -72,7 +72,8 @@ class JellyFishTop(Topo):
 def experiment(net):
     net.start()
     sleep(3)
-    net.pingAll()
+    net.ping(h1, h2)
+    # net.pingAll()
     net.stop()
 
 TOPOS = {'JellyTopo' : (lambda : JellyFishTop())}
