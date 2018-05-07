@@ -175,7 +175,8 @@ class TopoSwitch (object):
     # Default: this switch is connected to our destination port.
     # Port 1 always connects to host, by our design. 
     # TODO: THIS DOESN'T GET THE PACKET FROM SWITCH TO HOST???
-    outport = of.OFPP_IN_PORT
+    # outport = of.OFPP_IN_PORT
+    outport = 1
 
     # Other case: this switch is not connected to destination port, will have
     # to forward to other switch.
@@ -288,7 +289,7 @@ class TopoSwitch (object):
         # Ignore LLDP packets
         return
 
-    self.act_like_hub(packet, packet_in)
+    # self.act_like_hub(packet, packet_in)
 
     arpp = packet.find('arp')
     if arpp is not None:
