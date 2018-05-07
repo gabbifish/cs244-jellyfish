@@ -5,11 +5,6 @@ from networkx.readwrite import json_graph
 from collections import defaultdict
 import random
 
-G = nx.random_regular_graph(d=2, n=3)
-
-# nodes -> list of neighbors
-adj_list = {}
-
 ''' Builds topology from algorithm described in paper '''
 def build_from_algorithm(nswitches=3, nhosts=3, k=3, r=1):
     nPortsUsed = defaultdict(int) # switch => num ports that have been connected to a link
@@ -60,9 +55,7 @@ def update_adj_list(adj_list, v1, v2):
     adj_list.setdefault(v1, [])
     adj_list[v1].append(v2)
 
-def build_from_networkx():
-    G = nx.random_regular_graph(d=2, n=3)
-
+def build_from_networkx(G):
     # nodes -> list of neighbors
     adj_dict = {node: list(G.neighbors(node)) for node in G.nodes()}
 
@@ -103,14 +96,21 @@ def build_port_map(adj_dict):
     
     return port_map
 
-# adj = build_from_algorithm()
-adj = build_from_networkx()
-port_map = build_port_map(adj)
+def create_graph_json():
+    # adj = build_from_algorithm()
+    G = nx.random_regular_graph(d=3, n=14)
+    adj = build_from_networkx(G)
+    #port_map = build_port_map(adj)
 
-# Output adjacency list in json format into temp file.
-with open('graph.json', 'w') as fp:
-    json.dump(adj, fp)
-    
-with open('port_map.json', 'w') as fp:
-    json.dump(port_map, fp)
-    
+    # Output adjacency list in json format into temp file.
+    with open('graph.json', 'w') as fp:
+        json.dump(adj, fp)
+
+    adj_data = json_graph.adjacency_data(G)
+    with open('nxgraph.json', 'w') as fp:
+        json.dump(adj_data, fp)
+        
+    # with open('port_map.json', 'w') as fp:
+    #     json.dump(port_map, fp)
+        
+create_graph_json()

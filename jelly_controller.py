@@ -41,9 +41,29 @@ log = core.getLogger()
 # launch().
 G = None
 
-# def k_shortest_paths(graph, source, target, k=8):
-#   return list(itertools.islice(
-#       nx.shortest_simple_paths(graph, source, target), k))
+with open('pox/ext/nxgraph.json', 'r') as fp:
+  data = json.load(fp)
+  G = json_graph.adjacency_graph(data)
+
+# NOTE: cannot recalculate k_shortest_paths on each hop or we might go back
+# on a different path... this produces cycles
+def k_shortest_paths(graph, source, target, k=1):
+  return list(itertools.islice(
+      nx.shortest_simple_paths(graph, source, target), k))
+
+def get_out_port(src, dst):
+  if src == dst:
+    # the destination is the host attached to this switch
+    # all switches attach to their host at port 1
+    return 1
+
+  # choose one random path out of 8 shortest paths to traverse
+  paths = k_shortest_paths(G, src, dst)
+  path = random.choice(paths)
+  next_hop = path[1]
+
+  # this switch is connected to switch i via port i+2
+  return next_hop + 2
 
 # Adjacency map.  [sw1][sw2] -> port from sw1 to sw2
 # adjacency = defaultdict(lambda:defaultdict(lambda:None))
@@ -190,7 +210,8 @@ class TopoSwitch (object):
       # TODO: PUT NEXT-HOP SELECTION CODE HERE!!! THIS WILL USE THE ALGORITHMS!
       # Right now, since we are using a triangle topology and all switches are connected,
       # we know that sending the packet to sX will send it to hX.
-      outport = dst_host + 2
+      #outport = dst_host + 2
+      outport = get_out_port(self._id, dst_host)
 
     log.info("forwarding out of switch %d using port %d", self._id, outport)
 
