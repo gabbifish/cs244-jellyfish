@@ -1,3 +1,5 @@
 #!/bin/bash
 
-# The sequence of bash commands for generating table 1 go here :)
+# The sequence of bash commands for generating table 1
+sudo python build_topology.py
+python experiment_results.py

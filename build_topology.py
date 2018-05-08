@@ -13,6 +13,7 @@ from mininet.node import RemoteController
 from mininet.cli import CLI
 sys.path.append("../../")
 from pox.ext.jelly_pox import JELLYPOX
+from pox.ext.jelly_pox import JELLYPOXECMP
 from subprocess import Popen, PIPE
 from time import sleep
 import itertools
@@ -186,7 +187,7 @@ def iperf_test(hosts, test_type, index=0):
         # Wait for iperf server to terminate
         server.cmd( "wait" )
 
-def experiment(net):
+def experiment_8shortest(net):
     print "Starting mininet..."
     net.start()
     # sleep to wait for switches to come up and connect to controller
@@ -198,33 +199,47 @@ def experiment(net):
     print "Running tests to estimate link capacity"
     iperf_baseline(net.hosts)
 
-    # TODO: figure out how to run ecmp and 8 shortest path experiments in same script
-    # print "Running TCP 1-flow experiment on jellyfish"
-    # for i in range(0, num_runs):
-    #     iperf_test(net.hosts, "shortest8_1flow", i)
+    print "Starting k_shortest experiments"
 
-    # print "Running TCP 8-flow experiment on jellyfish"
-    # for i in range(0, num_runs):
-    #     iperf_test(net.hosts, "shortest8_8flow", i)
+    print "Running TCP 1-flow experiment on jellyfish"
+    for i in range(0, num_runs):
+        iperf_test(net.hosts, "shortest8_1flow", i)
+
+    print "Running TCP 8-flow experiment on jellyfish"
+    for i in range(0, num_runs):
+        iperf_test(net.hosts, "shortest8_8flow", i)
     
-    # print "Running TCP 1-flow experiment on jellyfish"
-    # for i in range(0, num_runs):
-    #     iperf_test(net.hosts, "ecmp_1flow", i)
-
-    # print "Running TCP 8-flow experiment on jellyfish"
-    # for i in range(0, num_runs):
-    #     iperf_test(net.hosts, "ecmp_8flow", i)
-   
-    #CLI(net)
-    # net.pingAll()
-    print "Done. Shutting down mininet."
+    print "Done with k_shortest experiments"
     net.stop()
+
+def experiment_ecmp(net):
+    print "Starting ecmp experiments"
+    net.start()
+    # sleep to wait for switches to come up and connect to controller
+    sleep(3)
+
+    num_runs = 5
+    
+    print "Running TCP 1-flow experiment on jellyfish"
+    for i in range(0, num_runs):
+        iperf_test(net.hosts, "ecmp_1flow", i)
+
+    print "Running TCP 8-flow experiment on jellyfish"
+    for i in range(0, num_runs):
+        iperf_test(net.hosts, "ecmp_8flow", i)
+   
+    print "Done with ecmp experiments"
+    net.stop()
+
 
 TOPOS = {'JellyTopo' : (lambda : JellyFishTop())}
 def main():
 	topo = JellyFishTop()
 	net = Mininet(topo=topo, host=CPULimitedHost, link = TCLink, controller=JELLYPOX)
-	experiment(net)
+    experiment_8shortest(net)
+    sleep(3)
+    net = Mininet(topo=topo, host=CPULimitedHost, link = TCLink, controller=JELLYPOXECMP)
+    experiment_ecmp(net) 
 
 if __name__ == "__main__":
 	main()
