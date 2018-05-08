@@ -1,6 +1,45 @@
 ## Jellyfish Paper replication Readme
 
-### How to run Mininet with Custom POX Controller
+### Setup
+This code has only been tested on Linux Debian 4.9, but should also work on latest versions of Ubuntu or Debian.
+
+First, you must install mininet:
+```
+apt-get install mininet
+```
+
+Then, download pox in the same directory as mininet:
+```
+git clone https://github.com/noxrepo/pox
+```
+
+Ensure you have pip, the python package manager installed:
+```
+apt-get install pip
+```
+
+Copy the contents of this github repository into pox/ext.
+
+Finally, run the following to download any final python dependencies:
+```
+pip install -r requirements.txt
+```
+
+### Generating Figure 9
+Run
+```
+./count_link_paths.py
+```
+to generate Figure 9. Figure 9 will be in generated file figure9.png.
+
+### Generating Data for Table 1
+Run
+```
+./count_throughput_bandwidth
+```
+to run the mininet simulation and iperf experiments. This will generate Table 1 as output in table1_withbaseline.png.
+
+### How to run Mininet Cli with Custom POX Controller
 First, you will need to ensure screen is installed. You can use apt-get to install.
 
 Then, launch POX with a custom controller jelly_controller.py; use screen to launch POX in a separate screen so you can still use the mininet cli. From the `~/pox/pox/cd` directory run:
@@ -14,7 +53,7 @@ POX will now run in a separate screen. You can access this screen using `screen 
 Next, you must start the mininet client over your custom topology and configure it to use your custom POX controller. From the `~/pox/pox/cd` directory, run the following:
 
 ```
-sudo mn --custom build_topology.py --topo JellyTopo --test pingall --controller=remote,ip=127.0.0.1,port=6633
+sudo mn --custom build_topology.py --topo JellyTopo --controller=remote,ip=127.0.0.1,port=6633
 ```
 
 That starts a test on the custom mininet topology using your custom controller!
