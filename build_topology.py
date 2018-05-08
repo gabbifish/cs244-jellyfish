@@ -14,7 +14,7 @@ from mininet.cli import CLI
 sys.path.append("../../")
 from pox.ext.jelly_pox import JELLYPOX
 from subprocess import Popen, PIPE
-# from time import sleep, time
+from time import sleep
 
 def byteify(input):
     if isinstance(input, dict):
@@ -130,13 +130,17 @@ def experiment(net):
     # hosts_copy.remove(a)
     b = random.choice(hosts_copy)
     # hosts_copy.remove(b)
-    command_str_b = "/usr/bin/iperf -s -p %d > a.txt" % (5555)
-    command_str_a = "/usr/bin/iperf -c %s -r -p %d -P 8 > b.txt" % (b.IP(), 5555)
+    command_str_b = "/usr/bin/iperf -s -p %d &" % (5555)
+    command_str_a = "/usr/bin/iperf -c %s -r -p %d -P 8 &" % (b.IP(), 5555)
+    # a.startShell()
+    # b.startShell()
+    a.sendCmd(command_str_a)
+    b.sendCmd(command_str_b)
     # command_str = "/usr/bin/iperf -c %s -s %s -r -p %d" % (a.IP(), b.IP(), 5020+i)
-    proc_a = Popen(command_str_a.split(), stdout=PIPE)
-    print "server up"
-    proc_b = Popen(command_str_b.split(), stdout=PIPE)
-    print "client up"
+    # proc_a = Popen(command_str_a.split(), stdout=PIPE)
+    # print "server up"
+    # proc_b = Popen(command_str_b.split(), stdout=PIPE)
+    # print "client up"
         # proc = Popen(command_str.split())
         # stdout = proc.communicate()[0]
         # print 'STDOUT:{}'.format(stdout)
