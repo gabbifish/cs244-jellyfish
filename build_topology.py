@@ -13,8 +13,8 @@ from mininet.node import RemoteController
 from mininet.cli import CLI
 sys.path.append("../../")
 from pox.ext.jelly_pox import JELLYPOX
-from subprocess import Popen
-from time import sleep, time
+from subprocess import Popen, PIPE
+# from time import sleep, time
 
 def byteify(input):
     if isinstance(input, dict):
@@ -111,8 +111,8 @@ class JellyFishTop(Topo):
                 nPortsUsed[s2] += 1
 
         # Output adjacency list in json format into temp file.
-        with open('jellyfish_graph_adj_list.json', 'w') as fp:
-            json.dump(adj_list, fp)
+        # with open('jellyfish_graph_adj_list.json', 'w') as fp:
+            # json.dump(adj_list, fp)
 
     def update_adj_list(self, adj_list, v1, v2):
         adj_list.setdefault(v1, [])
@@ -123,6 +123,23 @@ def experiment(net):
     sleep(3)
     #net.ping(h1, h2)
     print "running experiment"
+    # select random hosts to perform iperf on.
+    hosts_copy = list(net.hosts)
+    # for i in xrange(0,2):
+    a = random.choice(hosts_copy)
+    # hosts_copy.remove(a)
+    b = random.choice(hosts_copy)
+    # hosts_copy.remove(b)
+    command_str_b = "/usr/bin/iperf -s -p %d > a.txt" % (5555)
+    command_str_a = "/usr/bin/iperf -c %s -r -p %d -P 8 > b.txt" % (b.IP(), 5555)
+    # command_str = "/usr/bin/iperf -c %s -s %s -r -p %d" % (a.IP(), b.IP(), 5020+i)
+    proc_a = Popen(command_str_a.split(), stdout=PIPE)
+    print "server up"
+    proc_b = Popen(command_str_b.split(), stdout=PIPE)
+    print "client up"
+        # proc = Popen(command_str.split())
+        # stdout = proc.communicate()[0]
+        # print 'STDOUT:{}'.format(stdout)
     # net.pingAll()
     net.stop()
 
