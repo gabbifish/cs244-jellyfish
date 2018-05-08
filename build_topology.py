@@ -231,15 +231,15 @@ def experiment_ecmp(net):
     print "Done with ecmp experiments"
     net.stop()
 
-
 TOPOS = {'JellyTopo' : (lambda : JellyFishTop())}
 def main():
-	topo = JellyFishTop()
-	net = Mininet(topo=topo, host=CPULimitedHost, link = TCLink, controller=JELLYPOX)
-    experiment_8shortest(net)
-    sleep(3)
-    net = Mininet(topo=topo, host=CPULimitedHost, link = TCLink, controller=JELLYPOXECMP)
-    experiment_ecmp(net) 
+    	topo = JellyFishTop()
+        if len(sys.argv) > 1 and sys.argv[1] == "ecmp":
+            	net = Mininet(topo=topo, host=CPULimitedHost, link = TCLink, controller=JELLYPOXECMP)
+                experiment_ecmp(net) 
+        else:
+                net = Mininet(topo=topo, host=CPULimitedHost, link = TCLink, controller=JELLYPOX)
+                experiment_8shortest(net)
 
 if __name__ == "__main__":
 	main()

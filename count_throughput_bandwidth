@@ -2,4 +2,6 @@
 
 # The sequence of bash commands for generating table 1
 sudo python build_topology.py
+sudo mn -c
+sudo python build_topology.py ecmp
 python experiment_results.py
