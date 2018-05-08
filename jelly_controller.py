@@ -57,23 +57,9 @@ def k_shortest_paths(graph, source, target, k=1):
   return list(itertools.islice(
       nx.shortest_simple_paths(graph, source, target), k))
 
-def choose_path(src, dst):
-  paths = k_shortest_paths(G, src, dst, k=8)
-  return random.choice(paths)
-
-def get_out_port(src, dst):
-  if src == dst:
-    # the destination is the host attached to this switch
-    # all switches attach to their host at port 1
-    return 1
-
-  # choose one random path out of 8 shortest paths to traverse
-  paths = k_shortest_paths(G, src, dst)
-  path = random.choice(paths)
-  next_hop = path[1]
-
-  # this switch is connected to switch i via port i+2
-  return next_hop + 2
+def ecmp(graph, source, target, k=1):
+    return list(itertools.islice(
+        nx.all_shortest_paths(graph, source, target), k))
 
 # Adapted from ripl-pox source code
 def packet_hash(packet):
@@ -230,7 +216,8 @@ class TopoSwitch (object):
       hashkey = packet_hash(packet)
       if inport == 1:
         # received a packet from the attached host
-        paths = k_shortest_paths(G, self._id, dst_host, k=8)
+        #paths = k_shortest_paths(G, self._id, dst_host, k=8)
+        paths = ecmp(G, self._id, dst_host, k=8)
         path_map[hashkey] = random.choice(paths)
 
       if dst_host != self._id:

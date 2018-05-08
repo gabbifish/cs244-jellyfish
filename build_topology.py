@@ -15,6 +15,13 @@ sys.path.append("../../")
 from pox.ext.jelly_pox import JELLYPOX
 from subprocess import Popen, PIPE
 from time import sleep
+import itertools
+
+def pairwise(iterable):
+    "s -> (s0,s1), (s1,s2), (s2, s3), ..."
+    a, b = itertools.tee(iterable)
+    next(b, None)
+    return zip(a, b) 
 
 def byteify(input):
     if isinstance(input, dict):
@@ -38,6 +45,7 @@ class JellyFishTop(Topo):
         with open(filename, 'r') as fp:
             adj_dict = byteify(json.load(fp))
             
+            linkopts = dict(bw=1)
 
             # add all switches. The first port will always connect to a host.
             for node in adj_dict.keys():
@@ -62,7 +70,8 @@ class JellyFishTop(Topo):
                     if (s, n) not in connected_switches \
                             and (n, s) not in connected_switches:
 
-                        self.addLink(s, n, port1=int(i)+2, port2=int(node)+2)
+                        opts = { 'bw': .1}
+                        self.addLink(s, n, port1=int(i)+2, port2=int(node)+2, opts=opts)
                         # self.addLink(s, n)
                         connected_switches.add((s, n))
 
@@ -118,33 +127,68 @@ class JellyFishTop(Topo):
         adj_list.setdefault(v1, [])
         adj_list[v1].append(v2)
 
+
+def iperf_test(hosts, test_type, index=0):
+    # host to pid of the iperf client process
+    host_to_pid = {}
+    for client, server in pairwise(hosts):
+        print "  testing throughput from %s to %s" % (client.name, server.name)
+
+        output_file = "iperf_%s_%s_to_%s_%d.txt" % (test_type,
+            client.name, server.name, index)
+        server_cmd = "iperf -s -p %d &" % (5555)
+        client_cmd = "iperf -c %s -p %d %s -t %d > %s &" % (server.IP(),
+            5555, ("-P 8" if test_type.endswith("") else ""), 5, output_file)
+        
+        print "    on %s running command: %s" % (server.name, server_cmd)
+        server.sendCmd(server_cmd)
+        # wait until command has executed
+        server.waitOutput(verbose=True)
+        print "    on %s running command: %s" % (client.name, client_cmd)
+        client.sendCmd(client_cmd)
+        client.waitOutput(verbose=True)
+        pid = int(client.cmd('echo $!'))
+        host_to_pid[client] = pid
+
+    print "Waiting for iperf tests to finish..."
+    for host, pid in host_to_pid.iteritems():
+        host.cmd('wait', pid)
+
+    print "Killing all iperf instances..."
+    # need to kill iperf instances so we can rerun these tests on the same mininet
+    for client, server in pairwise(hosts):
+        server.cmd( "kill -9 %iperf" )
+        # Wait for iperf server to terminate
+        server.cmd( "wait" )
+
 def experiment(net):
+    print "Starting mininet..."
     net.start()
+    # sleep to wait for switches to come up and connect to controller
     sleep(3)
-    #net.ping(h1, h2)
-    print "running experiment"
-    # select random hosts to perform iperf on.
-    hosts_copy = list(net.hosts)
-    # for i in xrange(0,2):
-    a = random.choice(hosts_copy)
-    # hosts_copy.remove(a)
-    b = random.choice(hosts_copy)
-    # hosts_copy.remove(b)
-    command_str_b = "/usr/bin/iperf -s -p %d &" % (5555)
-    command_str_a = "/usr/bin/iperf -c %s -r -p %d -P 8 &" % (b.IP(), 5555)
-    # a.startShell()
-    # b.startShell()
-    a.sendCmd(command_str_a)
-    b.sendCmd(command_str_b)
-    # command_str = "/usr/bin/iperf -c %s -s %s -r -p %d" % (a.IP(), b.IP(), 5020+i)
-    # proc_a = Popen(command_str_a.split(), stdout=PIPE)
-    # print "server up"
-    # proc_b = Popen(command_str_b.split(), stdout=PIPE)
-    # print "client up"
-        # proc = Popen(command_str.split())
-        # stdout = proc.communicate()[0]
-        # print 'STDOUT:{}'.format(stdout)
+
+    num_runs = 5
+
+    # TODO: figure out how to run ecmp and 8 shortest path experiments in same script
+    # print "Running TCP 1-flow experiment on jellyfish"
+    # for i in range(0, num_runs):
+    #     iperf_test(net.hosts, "shortest8_1flow", i)
+
+    # print "Running TCP 8-flow experiment on jellyfish"
+    # for i in range(0, num_runs):
+    #     iperf_test(net.hosts, "shortest8_8flow", i)
+    
+    print "Running TCP 1-flow experiment on jellyfish"
+    for i in range(0, num_runs):
+        iperf_test(net.hosts, "ecmp_1flow", i)
+
+    print "Running TCP 8-flow experiment on jellyfish"
+    for i in range(0, num_runs):
+        iperf_test(net.hosts, "ecmp_8flow", i)
+   
+    # CLI(net)
     # net.pingAll()
+    print "Done. Shutting down mininet."
     net.stop()
 
 TOPOS = {'JellyTopo' : (lambda : JellyFishTop())}

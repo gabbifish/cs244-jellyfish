@@ -98,7 +98,7 @@ def build_port_map(adj_dict):
 
 def create_graph_json():
     # adj = build_from_algorithm()
-    G = nx.random_regular_graph(d=3, n=6)
+    G = nx.random_regular_graph(d=3, n=14)
     adj = build_from_networkx(G)
     #port_map = build_port_map(adj)
 
