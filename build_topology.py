@@ -127,6 +127,31 @@ class JellyFishTop(Topo):
         adj_list.setdefault(v1, [])
         adj_list[v1].append(v2)
 
+def iperf_baseline(hosts):
+    # runs flows from 1 host to another in isolation
+    for client, server in pairwise(hosts):
+        print "  getting baseline from %s to %s" % (client.name, server.name)
+        for i in range(5):
+            output_file = "iperf_baseline_%s_to_%s_%d.txt" % (
+                client.name, server.name, i)
+            server_cmd = "iperf -s -p %d &" % (5555)
+            client_cmd = "iperf -c %s -p %d -t %d > %s &" % (server.IP(),
+                5555, 5, output_file)
+            
+            print "    on %s running command: %s" % (server.name, server_cmd)
+            server.sendCmd(server_cmd)
+            # wait until command has executed
+            server.waitOutput(verbose=True)
+            print "    on %s running command: %s" % (client.name, client_cmd)
+            client.sendCmd(client_cmd)
+            client.waitOutput(verbose=True)
+
+            # wait until processes are completely done
+            # only a pair of hosts is tested at a time
+            pid = int(client.cmd('echo $!'))
+            client.cmd('wait', pid)
+            server.cmd('kill -9 %iperf')
+            server.cmd('wait')
 
 def iperf_test(hosts, test_type, index=0):
     # host to pid of the iperf client process
@@ -138,7 +163,7 @@ def iperf_test(hosts, test_type, index=0):
             client.name, server.name, index)
         server_cmd = "iperf -s -p %d &" % (5555)
         client_cmd = "iperf -c %s -p %d %s -t %d > %s &" % (server.IP(),
-            5555, ("-P 8" if test_type.endswith("") else ""), 5, output_file)
+            5555, ("-P 8" if test_type.endswith("8flow") else ""), 5, output_file)
         
         print "    on %s running command: %s" % (server.name, server_cmd)
         server.sendCmd(server_cmd)
@@ -169,6 +194,10 @@ def experiment(net):
 
     num_runs = 5
 
+    # run tests to estimate link capacity
+    print "Running tests to estimate link capacity"
+    iperf_baseline(net.hosts)
+
     # TODO: figure out how to run ecmp and 8 shortest path experiments in same script
     # print "Running TCP 1-flow experiment on jellyfish"
     # for i in range(0, num_runs):
@@ -178,15 +207,15 @@ def experiment(net):
     # for i in range(0, num_runs):
     #     iperf_test(net.hosts, "shortest8_8flow", i)
     
-    print "Running TCP 1-flow experiment on jellyfish"
-    for i in range(0, num_runs):
-        iperf_test(net.hosts, "ecmp_1flow", i)
+    # print "Running TCP 1-flow experiment on jellyfish"
+    # for i in range(0, num_runs):
+    #     iperf_test(net.hosts, "ecmp_1flow", i)
 
-    print "Running TCP 8-flow experiment on jellyfish"
-    for i in range(0, num_runs):
-        iperf_test(net.hosts, "ecmp_8flow", i)
+    # print "Running TCP 8-flow experiment on jellyfish"
+    # for i in range(0, num_runs):
+    #     iperf_test(net.hosts, "ecmp_8flow", i)
    
-    # CLI(net)
+    #CLI(net)
     # net.pingAll()
     print "Done. Shutting down mininet."
     net.stop()

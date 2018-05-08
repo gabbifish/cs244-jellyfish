@@ -216,8 +216,8 @@ class TopoSwitch (object):
       hashkey = packet_hash(packet)
       if inport == 1:
         # received a packet from the attached host
-        #paths = k_shortest_paths(G, self._id, dst_host, k=8)
-        paths = ecmp(G, self._id, dst_host, k=8)
+        paths = k_shortest_paths(G, self._id, dst_host, k=8)
+        #paths = ecmp(G, self._id, dst_host, k=8)
         path_map[hashkey] = random.choice(paths)
 
       if dst_host != self._id:
