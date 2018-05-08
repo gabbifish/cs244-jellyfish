@@ -14,7 +14,18 @@ from mininet.cli import CLI
 sys.path.append("../../")
 from pox.ext.jelly_pox import JELLYPOX
 from subprocess import Popen
-#from time import sleep, time
+from time import sleep, time
+
+def byteify(input):
+    if isinstance(input, dict):
+        return {byteify(key): byteify(value)
+                for key, value in input.iteritems()}
+    elif isinstance(input, list):
+        return [byteify(element) for element in input]
+    elif isinstance(input, unicode):
+        return input.encode('utf-8')
+    else:
+        return input
 
 class JellyFishTop(Topo):
     ''' Builds topology '''
@@ -25,7 +36,8 @@ class JellyFishTop(Topo):
     ''' Builds topology from given json file of graph adjacency list'''
     def build_from_json(self, filename='graph.json'):
         with open(filename, 'r') as fp:
-            adj_dict = json.load(fp)
+            adj_dict = byteify(json.load(fp))
+            
 
             # add all switches. The first port will always connect to a host.
             for node in adj_dict.keys():
@@ -43,7 +55,6 @@ class JellyFishTop(Topo):
 
             # connect switches to each other
             connected_switches = set()
-            print adj_dict
             for node, neighbors in adj_dict.iteritems():
                 s = 's' + node
                 for i in neighbors:
@@ -110,7 +121,8 @@ class JellyFishTop(Topo):
 def experiment(net):
     net.start()
     sleep(3)
-    net.ping(h1, h2)
+    #net.ping(h1, h2)
+    print "running experiment"
     # net.pingAll()
     net.stop()
 
